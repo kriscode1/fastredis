@@ -1,6 +1,6 @@
 """Low-level wrappers around the exposed hiredis API."""
 
-from typing import Union
+from typing import AnyStr, Union
 
 from fastredis.exceptions import *
 import fastredis.hiredis as hiredis
@@ -14,7 +14,7 @@ from fastredis.hiredis import (
 )
 
 
-ReplyValue = Union[str, int, tuple, None]
+ReplyValue = Union[AnyStr, int, tuple, None]
 
 
 def get_reply_value(rep: hiredis.redisReply) -> ReplyValue:

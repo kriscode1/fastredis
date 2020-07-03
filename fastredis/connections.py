@@ -1,23 +1,18 @@
 """Connection class for a synchronous client."""
 
-from fastredis.wrappers import (
-    redis_connect,
-    redis_free,
-    redis_command,
-    ReplyValue,
-    redis_read,
-    redis_write
-)
+from abc import ABC, abstractmethod
+from functools import wraps
+from typing import Optional
 
-class Connection:
-
-    pass
+import fastredis.wrappers as wrappers
+from fastredis.wrappers import ReplyValue
+import fastredis.wrappersb as wrappersb
 
 
-class SyncConnection:
+class SyncConnection(ABC):
 
     def __init__(self,
-            ip: str,
+            ip: bytes,
             port: int = 6379,
             connect_timeout: float = None
         ):
@@ -26,6 +21,23 @@ class SyncConnection:
         self.connect_timeout = connect_timeout
 
         self.context = None
+
+
+    @abstractmethod
+    def _redis_connect():
+        pass
+    @abstractmethod
+    def _redis_free():
+        pass
+    @abstractmethod
+    def _redis_command():
+        pass
+    @abstractmethod
+    def _redis_write():
+        pass
+    @abstractmethod
+    def _redis_read():
+        pass
 
     def connect(self) -> None:
         """Connect to redis.
@@ -40,7 +52,7 @@ class SyncConnection:
         if self.context is not None:
             self.disconnect()
 
-        self.context = redis_connect(
+        self.context = self._redis_connect(
             ip=self.ip,
             port=self.port,
             timeout=self.connect_timeout
@@ -54,7 +66,7 @@ class SyncConnection:
 
         if self.context is None:
             return
-        redis_free(self.context)
+        self._redis_free(self.context)
         self.context = None
 
     def __enter__(self):
@@ -65,7 +77,7 @@ class SyncConnection:
         self.disconnect()
 
     def command(self, command: str) -> ReplyValue:
-        """Sends a command to redis and retrieves the reply.
+        """Send a command to redis and retrieve the reply.
 
         Raises:
             * Any type of HiredisError
@@ -74,21 +86,22 @@ class SyncConnection:
             * FastredisError if invalid response types
         """
 
-        return redis_command(context=self.context, command=command)
+        return self._redis_command(context=self.context, command=command)
 
     def write(self, command: str) -> None:
-        """Writes a command to the send buffer.
+        """Write a command to the send buffer, but do not send yet.
 
-        Use this for pipelining. To send the buffer, call read() or command().
+        Use this for pipelining. To flush the buffer and actually send its
+        contents, call read() or command().
 
         Raises:
             * ContextError (any type)
         """
 
-        redis_write(self.context, command)
+        self._redis_write(self.context, command)
 
     def read(self) -> ReplyValue:
-        """Reads a reply from the receive buffer.
+        """Flush the send buffer and read a reply from the receive buffer.
 
         If no message in the buffer, block until one arrives.
 
@@ -97,7 +110,73 @@ class SyncConnection:
             * FastredisError
         """
 
-        return redis_read(self.context)
+        return self._redis_read(self.context)
+
+
+def makemethod(func):
+    @wraps(func)
+    def method(self, *args, **kwargs):
+        return func(*args, **kwargs)
+    return method
+
+
+class SyncConnectionStr(SyncConnection):
+
+    def __init__(self,
+            ip: str,
+            port: int = 6379,
+            connect_timeout: float = None,
+        ):
+        self.ip = ip
+        self.port = port
+        self.connect_timeout = connect_timeout
+
+        self.context = None
+
+    _redis_connect = makemethod(wrappers.redis_connect)
+    _redis_free = makemethod(wrappers.redis_free)
+    _redis_command = makemethod(wrappers.redis_command)
+    _redis_write = makemethod(wrappers.redis_write)
+    _redis_read = makemethod(wrappers.redis_read)
+
+
+class SyncConnectionBytes(SyncConnection):
+
+    def __init__(self,
+            ip: bytes,
+            port: int = 6379,
+            connect_timeout: float = None
+        ):
+        self.ip = ip
+        self.port = port
+        self.connect_timeout = connect_timeout
+
+        self.context = None
+
+    _redis_connect = makemethod(wrappersb.redis_connect)
+    _redis_free = makemethod(wrappersb.redis_free)
+    _redis_command = makemethod(wrappersb.redis_command)
+    _redis_write = makemethod(wrappersb.redis_write)
+    _redis_read = makemethod(wrappersb.redis_read)
+
+
+def SyncConnection(*args, **kwargs):
+    """Create a synchronous connection object."""
+
+    if 'encoding' in kwargs:
+        encoding = kwargs['encoding']
+        del kwargs['encoding']
+        if encoding is not None:
+            encoding = encoding.lower()
+    else:
+        encoding = 'utf-8'
+
+    if encoding == 'utf-8':
+        return SyncConnectionStr(*args, **kwargs)
+    elif encoding is None:
+        return SyncConnectionBytes(*args, **kwargs)
+    else:
+        raise NotImplementedError('`encoding` must be "utf-8" or None')
 
 
 class AsyncConnection:

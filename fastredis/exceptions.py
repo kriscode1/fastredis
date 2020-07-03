@@ -16,7 +16,6 @@ Excpetion
 
 from typing import Optional
 
-import fastredis.hiredis as hiredis
 from fastredis.hiredis import (
     REDIS_ERR_IO,
     REDIS_ERR_OTHER,
@@ -69,7 +68,7 @@ class OutOfMemoryError(ContextError):
     pass
 
 
-def raise_context_error(context: Optional[hiredis.redisContext]) -> None:
+def raise_context_error(context) -> None:
     """Raises an exception if `context` contains an error."""
 
     # print('context is', context)
@@ -94,8 +93,8 @@ def raise_context_error(context: Optional[hiredis.redisContext]) -> None:
 
 
 def raise_reply_error(
-        context: Optional[hiredis.redisContext],
-        reply: Optional[hiredis.redisReply]
+        context,
+        reply
     ) -> None:
     """Raises an excpetion if `reply` or `context` contain an error."""
 

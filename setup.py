@@ -5,7 +5,14 @@ hiredis_module = Extension(
     name='_hiredis',
     sources=['fastredis/hiredis.i'],
     include_dirs=['/usr/include/hiredis'],
-    libraries=['hiredis']
+    libraries=['hiredis'],
+)
+
+hiredisb_module = Extension(
+    name='_hiredisb',
+    sources=['fastredis/hiredisb.i'],
+    include_dirs=['/usr/include/hiredis'],
+    libraries=['hiredis'],
 )
 
 setup(
@@ -20,5 +27,5 @@ setup(
     #platforms
     packages=['fastredis'],
     ext_package='fastredis',
-    ext_modules=[hiredis_module]
+    ext_modules=[hiredis_module, hiredisb_module],
 )

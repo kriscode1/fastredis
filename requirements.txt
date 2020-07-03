@@ -1,6 +1,7 @@
 pytest
 pytest-benchmark
 pytest-timeout
+python-redis
 redis
 setuptools
 tox

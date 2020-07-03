@@ -153,7 +153,9 @@ def test_redisAppendCommand(context):
         'DEL testkey'
     )
     for command in commands:
-        assert hiredis.redisAppendCommand(context, command) == hiredis.REDIS_OK
+        assert (hiredis.redisAppendCommand(context, command)
+            == hiredis.REDIS_OK
+        )
 
 
 def test_redisGetReply(context):
@@ -165,7 +167,9 @@ def test_redisGetReply(context):
         f'DEL {KEY}'
     )
     for command in commands:
-        assert hiredis.redisAppendCommand(context, command) == hiredis.REDIS_OK
+        assert (hiredis.redisAppendCommand(context, command)
+            == hiredis.REDIS_OK
+        )
 
     r = hiredis.redisReplyOut()
     hiredis.redisGetReplyOL(context, r)
