@@ -91,14 +91,12 @@ def raise_context_error(context) -> None:
         raise ContextError(f'Unknown error: {context.err}')
 
 
-def raise_reply_error(
-        context,
-        reply
+def raise_empty_reply_error(
+        context, # hiredis.redisContext or hiredisb.redisContext_b
+        reply    # hiredis.redisReply or hiredisb.redisReply_b or None
     ) -> None:
-    """Raises an excpetion if `reply` or `context` contain an error."""
+    """Raises an excpetion if `reply` is None."""
 
     if reply is None:
         raise_context_error(context)
         raise ContextError('Reply is empty and no error code is set.')
-    if reply.type == REDIS_REPLY_ERROR:
-        raise ReplyError(reply.str)

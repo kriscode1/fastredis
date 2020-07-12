@@ -1,4 +1,8 @@
-// SWIG mapping for hiredis version 0.14.0
+/* SWIG mapping for hiredis version 0.14.0
+
+Uses SWIG_PYTHON_STRICT_BYTE_CHAR so all char* conversions become python byte
+objects, not python str objects.
+*/
 
 %module hiredisb
 
@@ -50,6 +54,7 @@ typedef struct redisContext_b {
 redisContext_b* redisConnect_b(const char* ip, int port) {
     return (redisContext_b*)redisConnect(ip, port);
 }
+
 redisContext_b* redisConnectWithTimeout_b(
     const char* ip,
     int port,
@@ -57,15 +62,19 @@ redisContext_b* redisConnectWithTimeout_b(
 ) {
     return (redisContext_b*)redisConnectWithTimeout(ip, port, tv);
 }
+
 redisReply_b* redisCommand_b(redisContext_b* c, const char* format) {
     return (redisReply_b*)redisCommand((redisContext*)c, format);
 }
+
 void freeReplyObject_b(redisReply_b* reply) {
     freeReplyObject((redisReply*)reply);
 }
+
 void redisFree_b(redisContext_b* c) {
     redisFree((redisContext*)c);
 }
+
 int redisAppendCommand_b(redisContext_b* c, const char* format) {
     return redisAppendCommand((redisContext*)c, format);
 }
@@ -79,4 +88,4 @@ void redisGetReplyOL_b(redisContext_b* c, struct redisReplyOut_b* out) {
     out->ret = redisGetReply((redisContext*)c, (void**)&out->reply);
 }
 
-}
+} // end %inline

@@ -8,9 +8,8 @@ from fastredis.exceptions import *
 import fastredis.hiredis as hiredis
 from fastredis.hiredis import REDIS_OK
 from fastredis.wrapper_tools import (
-    get_reply_value,
-    convert_reply_array,
-    ReplyValue
+    ReplyValue,
+    reduce_reply
 )
 
 
@@ -45,11 +44,14 @@ def redis_connect(
     context = hiredis.redisAsyncConnect(ip, port)
     raise_context_error(context)
     create_callback = ctypes.CFUNCTYPE(None, ctypes.c_void_p)
+    fd_cannot_write = False
 
     def fd_ready_for_read():
         hiredis.redisAsyncHandleRead(context)
 
     def fd_ready_for_write():
+        nonlocal fd_cannot_write
+        fd_cannot_write = False
         hiredis.redisAsyncHandleWrite(context)
 
     def addread(privdata):
@@ -59,7 +61,27 @@ def redis_connect(
         loop.remove_reader(context.c.fd)
 
     def addwrite(privdata):
-        loop.add_writer(context.c.fd, fd_ready_for_write)
+        """Callback ran when hiredis has a message to send.
+
+        `fd_cannot_write` is an optimization. Most of the time, the fd is ready
+        for writing and can be written to immediately without churning the
+        event loop. When redisAsyncHandleWrite() is not able to write the full
+        buffer, it calls this callback function. On the second call of
+        addwrite(), the loop writer gets added. Only a successful flush of the
+        entire buffer or `fd_ready_for_write()` can set `fd_cannot_write` to
+        False.
+        """
+
+        nonlocal fd_cannot_write
+
+        if fd_cannot_write:
+            loop.add_writer(context.c.fd, fd_ready_for_write)
+            return
+
+        fd_cannot_write = True
+        hiredis.redisAsyncHandleWrite(context)
+        if hiredis.writeBufferLen(context) == 0:
+            fd_cannot_write = False
 
     def delwrite(privdata):
         loop.remove_writer(context.c.fd)
@@ -73,19 +95,25 @@ def redis_connect(
         ptr = ctypes.cast(c_cb, ctypes.c_void_p).value
         return c_cb, ptr
 
-    arcb, context.ev.addRead = get_cb_ptr(addread)
+    # addread() is written as a callback for hiredis, but hiredis does not
+    # ever call the delread() callback itself. By adding the loop reader
+    # once here, and not passing addread() to hiredis, the number of
+    # unnecessary callbacks is greatly reduced.
+    addread(None)
+
+    # arcb, context.ev.addRead = get_cb_ptr(addread)
     drcb, context.ev.delRead = get_cb_ptr(delread)
     awcb, context.ev.addWrite = get_cb_ptr(addwrite)
     dwcb, context.ev.delWrite = get_cb_ptr(delwrite)
     cucb, context.ev.cleanup = get_cb_ptr(cleanup)
 
     return context, [
-        addread,
+        # addread,
         delread,
         addwrite,
         delwrite,
         cleanup,
-        arcb,
+        # arcb,
         drcb,
         awcb,
         dwcb,
@@ -162,16 +190,8 @@ def redis_free(context: hiredis.redisAsyncConnect) -> None:
     hiredis.redisAsyncFree(context)
 
 
-def convert_and_copy_reply_array(rep):
-    """Recursively converts nested reply arrays into reply object copies."""
-
-    rep = copy_reply(rep)
-    convert_reply_array(rep)
-    if len(rep.pyelements) > 0:
-        rep.pyelements = tuple(
-            convert_and_copy_reply_array(subr) for subr in rep.pyelements
-        )
-    return rep
+# Helper func for redis_command()
+_create_reply_callback = ctypes.CFUNCTYPE(None, ctypes.c_void_p)
 
 
 async def redis_command(
@@ -187,16 +207,22 @@ async def redis_command(
     """
 
     reply_fut = asyncio.get_event_loop().create_future()
-    def reply_cb(reply):
+    def reply_cb(reply: int):
+        if reply is None:
+            try:
+                raise_empty_reply_error(context)
+            except Exception as e:
+                reply_fut.set_exception(e)
+            return
         try:
-            reply = hiredis.castRedisReply(reply)
+            reply: hiredis.redisReply = hiredis.castRedisReply(reply)
             # A copy is required because hiredis deletes the reply after this
-            # callback is finished.
-            reply_fut.set_result(convert_and_copy_reply_array(reply))
+            # callback is finished. reduce_reply() will return the reply value.
+            reply_fut.set_result(reduce_reply(reply))
         except Exception as e:
             reply_fut.set_exception(e)
 
-    c_cb = ctypes.CFUNCTYPE(None, ctypes.c_void_p)(reply_cb)
+    c_cb = _create_reply_callback(reply_cb)
     ptr = ctypes.cast(c_cb, ctypes.c_void_p).value
 
     status = hiredis.redisAsyncCommandOL(context, command, ptr)
@@ -204,6 +230,4 @@ async def redis_command(
         raise_context_error(context)
         raise ContextError('Cannot add command to write queue.')
 
-    reply = await reply_fut
-    raise_reply_error(context, reply)
-    return get_reply_value(reply)
+    return await reply_fut

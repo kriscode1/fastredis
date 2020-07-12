@@ -6,9 +6,8 @@ from fastredis.exceptions import *
 import fastredis.hiredis as hiredis
 import fastredis.hiredisb as hiredisb
 from fastredis.wrapper_tools import (
-    get_reply_value,
     ReplyValue,
-    convert_reply_array_b
+    reduce_reply_b
 )
 
 
@@ -55,9 +54,8 @@ def redis_command(
     """
 
     rep = hiredisb.redisCommand_b(context, command)
-    raise_reply_error(context, rep)
-    convert_reply_array_b(rep)
-    ret = get_reply_value(rep)
+    raise_empty_reply_error(context, rep)
+    ret = reduce_reply_b(rep)
     hiredisb.freeReplyObject_b(rep)
     return ret
 
@@ -84,8 +82,7 @@ def redis_read(context: hiredisb.redisContext_b) -> ReplyValue:
         raise_context_error(context)
         raise ContextError('redisGetReply error and no error code is set.')
     rep = out.reply
-    raise_reply_error(context, rep)
-    convert_reply_array_b(rep)
-    ret = get_reply_value(rep)
+    raise_empty_reply_error(context, rep)
+    ret = reduce_reply_b(rep)
     hiredisb.freeReplyObject_b(rep)
     return ret

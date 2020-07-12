@@ -17,43 +17,7 @@ ReplyValue = Union[AnyStr, int, tuple, None]
 AnyReply = Union[hiredis.redisReply, hiredisb.redisReply_b]
 
 
-
-def convert_reply_array(rep: hiredis.redisReply) -> None:
-    """Converts redisReply.element ** into python objects.
-
-    The result is stored in rep.pyelements.
-    """
-
-    if rep.type != REDIS_REPLY_ARRAY or rep.elements == 0:
-        rep.pyelements = tuple()
-        return
-    rep.pyelements = tuple(
-        hiredis.replies_index(rep.element, i) for i in range(rep.elements)
-    )
-
-
-def convert_reply_array_b(rep: hiredisb.redisReply_b) -> None:
-    """Converts redisReply.element ** into python objects.
-
-    The result is stored in rep.pyelements.
-    """
-
-    if rep.type != REDIS_REPLY_ARRAY or rep.elements == 0:
-        rep.pyelements = tuple()
-        return
-    rep.pyelements = tuple(
-        hiredisb.replies_index_b(rep.element, i) for i in range(rep.elements)
-    )
-
-
-def get_reply_value(rep: AnyReply) -> ReplyValue:
-    """Gets the contents of a reply or raises the appropriate error.
-
-    Raises:
-        * ReplyError (Redis server is returning an error)
-        * FastredisError (Unknown reply type)
-    """
-
+def reduce_reply(rep: hiredis.redisReply) -> ReplyValue:
     if rep.type == REDIS_REPLY_STATUS:
         return rep.str
     elif rep.type == REDIS_REPLY_STRING:
@@ -63,8 +27,31 @@ def get_reply_value(rep: AnyReply) -> ReplyValue:
     elif rep.type == REDIS_REPLY_NIL:
         return None
     elif rep.type == REDIS_REPLY_ARRAY:
-        return tuple(get_reply_value(subr) for subr in rep.pyelements)
+        return tuple(
+            reduce_reply(hiredis.replies_index(rep.element, i))
+            for i in range(rep.elements)
+        )
     elif rep.type == REDIS_REPLY_ERROR:
-        raise ReplyError
+        raise ReplyError(rep.str)
+    else:
+        raise FastredisError(f'Invalid reply type: {rep.type}')
+
+
+def reduce_reply_b(rep: hiredisb.redisReply_b) -> ReplyValue:
+    if rep.type == REDIS_REPLY_STATUS:
+        return rep.str
+    elif rep.type == REDIS_REPLY_STRING:
+        return rep.str
+    elif rep.type == REDIS_REPLY_INTEGER:
+        return rep.integer
+    elif rep.type == REDIS_REPLY_NIL:
+        return None
+    elif rep.type == REDIS_REPLY_ARRAY:
+        return tuple(
+            reduce_reply(hiredisb.replies_index_b(rep.element, i))
+            for i in range(rep.elements)
+        )
+    elif rep.type == REDIS_REPLY_ERROR:
+        raise ReplyError(rep.str)
     else:
         raise FastredisError(f'Invalid reply type: {rep.type}')

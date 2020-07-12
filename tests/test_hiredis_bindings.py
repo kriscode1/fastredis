@@ -1,7 +1,7 @@
 import pytest
 
 from fastredis import hiredis
-from fastredis.wrapper_tools import convert_reply_array
+from fastredis.wrapper_tools import reduce_reply
 
 
 REDIS_IP = '127.0.0.1'
@@ -127,13 +127,14 @@ def test_redisCommand_reply_array(context):
     r = hiredis.redisCommand(context, f'KEYS testkey*')
     assert r is not None
     assert r.type == hiredis.REDIS_REPLY_ARRAY
-    convert_reply_array(r)
     assert r.elements >= len(keys)
     returned_keys = set()
-    for subr in r.pyelements:
-        assert subr.type == hiredis.REDIS_REPLY_STRING
-        assert subr.len == len(subr.str)
-        returned_keys.add(subr.str)
+    rep = reduce_reply(r)
+    assert isinstance(rep, tuple)
+    assert len(rep) >= len(keys)
+    for key in rep:
+        assert isinstance(key, str)
+        returned_keys.add(key)
     assert set(keys) <= returned_keys
     cleanup_keys(context, keys)
 

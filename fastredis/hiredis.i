@@ -38,12 +38,6 @@ typedef struct redisReply {
     struct redisReply** element;
 } redisReply;
 
-%inline {
-redisReply* replies_index(redisReply** replies, size_t index) {
-    return replies[index];
-}
-}
-
 typedef struct redisContext {
     int err;
     char errstr[128];
@@ -63,7 +57,6 @@ typedef struct redisContext {
     } unix_sock;
 } redisContext;
 
-
 redisContext* redisConnect(const char* ip, int port);
 redisContext* redisConnectWithTimeout(
     const char* ip,
@@ -76,6 +69,11 @@ void redisFree(redisContext* c);
 int redisAppendCommand(redisContext* c, const char* format);
 
 %inline {
+
+redisReply* replies_index(redisReply** replies, size_t index) {
+    return replies[index];
+}
+
 struct redisReplyOut {
     redisReply* reply;
     int ret;
@@ -87,7 +85,8 @@ struct redisReplyOut {
 void redisGetReplyOL(redisContext* c, struct redisReplyOut* out) {
     out->ret = redisGetReply(c, (void**)&out->reply);
 }
-}
+
+} // end %inline
 
 
 /****************************
@@ -139,8 +138,11 @@ void redisAsyncDisconnect(redisAsyncContext* ac);
 void redisAsyncFree(redisAsyncContext* ac);
 int redisAsyncSetConnectCallback(redisAsyncContext* ac, void (*fn)(const struct redisAsyncContext*, int));
 int redisAsyncSetDisconnectCallback(redisAsyncContext* ac, void (*fn)(const struct redisAsyncContext*, int));
+void redisAsyncHandleRead(redisAsyncContext* ac);
+void redisAsyncHandleWrite(redisAsyncContext* ac);
 
 %inline {
+
 void redisAsyncCommandCBWrapper(
     struct redisAsyncContext* ac, void* reply, void* privdata
 ) {
@@ -149,6 +151,7 @@ void redisAsyncCommandCBWrapper(
         cb((redisReply*)reply);
     }
 }
+
 int redisAsyncCommandOL(
     redisAsyncContext * ac,
     const char* command,
@@ -160,6 +163,7 @@ int redisAsyncCommandOL(
     */
     return redisAsyncCommand(ac, redisAsyncCommandCBWrapper, cb, command);
 }
+
 redisReply* castRedisReply(unsigned long long reply_ptr) {
     /* Cast a ptr to a redisReply object.
 
@@ -169,7 +173,9 @@ redisReply* castRedisReply(unsigned long long reply_ptr) {
     */
     return (redisReply*)reply_ptr;
 }
+
+size_t writeBufferLen(redisAsyncContext* ac) {
+    return sdslen(ac->c.obuf);
 }
 
-void redisAsyncHandleRead(redisAsyncContext* ac);
-void redisAsyncHandleWrite(redisAsyncContext* ac);
+} // end %inline
