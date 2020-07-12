@@ -27,7 +27,9 @@ from fastredis.hiredis import (
     REDIS_REPLY_INTEGER,
     REDIS_REPLY_NIL,
     REDIS_REPLY_STATUS,
-    REDIS_REPLY_ERROR
+    REDIS_REPLY_ERROR,
+    REDIS_ERR,
+    REDIS_OK
 )
 
 
@@ -71,12 +73,9 @@ class OutOfMemoryError(ContextError):
 def raise_context_error(context) -> None:
     """Raises an exception if `context` contains an error."""
 
-    # print('context is', context)
     if context is None:
-        # print('empty context')
         raise ContextError('Empty context')
     if context.err == 0:
-        # print('no error')
         return
     elif context.err == REDIS_ERR_IO:
         raise IOError

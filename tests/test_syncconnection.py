@@ -1,4 +1,8 @@
-from fastredis.connections import SyncConnection, SyncConnectionBytes
+from fastredis.connections import (
+    SyncConnection,
+    SyncConnectionBytes,
+    SyncConnectionStr
+)
 
 
 REDIS_IP = '127.0.0.1'
@@ -6,7 +10,7 @@ REDIS_IP = '127.0.0.1'
 
 def test_connect():
     with SyncConnection(REDIS_IP) as redis:
-        pass
+        assert isinstance(redis, SyncConnectionStr)
 
 
 def test_command():

@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 
 
@@ -13,7 +14,7 @@ VAL_B = VAL.encode()
 
 @pytest.fixture(scope='function', autouse=False)
 def keys():
-    KEY_COUNT = 1000
+    KEY_COUNT = 10_000
     yield [f'testkey{i}' for i in range(KEY_COUNT)]
 
 
@@ -21,6 +22,40 @@ def keys():
 ############################################################
 # Str Benchmarks
 ############################################################
+############################################################
+
+
+@pytest.mark.benchmark(group='connect_disconnect')
+def test_connect_disconnect_fastredis(benchmark):
+    import fastredis as fr
+    def work():
+        with fr.SyncConnection(REDIS_IP, REDIS_PORT) as r:
+            pass
+    benchmark(work)
+
+
+@pytest.mark.benchmark(group='connect_disconnect')
+def test_connect_disconnect_redis(benchmark):
+    import redis
+    def work():
+        with redis.Redis(REDIS_IP, REDIS_PORT, decode_responses=True) as r:
+            pass
+    benchmark(work)
+
+
+@pytest.mark.benchmark(group='connect_disconnect')
+def test_connect_disconnect_pyredis(benchmark):
+    import pyredis
+    def work():
+        r = None
+        try:
+            r = pyredis.Client(host=REDIS_IP, port=REDIS_PORT)
+        finally:
+            if r is not None:
+                r.close()
+    benchmark(work)
+
+
 ############################################################
 
 
@@ -173,6 +208,40 @@ def test_set_get_del_pyredis(benchmark, keys):
 ############################################################
 
 
+@pytest.mark.benchmark(group='b_connect_disconnect')
+def test_b_connect_disconnect_fastredis(benchmark):
+    import fastredis as fr
+    def work():
+        with fr.SyncConnection(REDIS_IP, REDIS_PORT) as r:
+            pass
+    benchmark(work)
+
+
+@pytest.mark.benchmark(group='b_connect_disconnect')
+def test_b_connect_disconnect_redis(benchmark):
+    import redis
+    def work():
+        with redis.Redis(REDIS_IP, REDIS_PORT, decode_responses=True) as r:
+            pass
+    benchmark(work)
+
+
+@pytest.mark.benchmark(group='b_connect_disconnect')
+def test_b_connect_disconnect_pyredis(benchmark):
+    import pyredis
+    def work():
+        r = None
+        try:
+            r = pyredis.Client(host=REDIS_IP, port=REDIS_PORT)
+        finally:
+            if r is not None:
+                r.close()
+    benchmark(work)
+
+
+############################################################
+
+
 @pytest.mark.benchmark(group='b_single_set_get_del')
 def test_b_single_set_get_del_fastredis(benchmark):
     import fastredis as fr
@@ -303,4 +372,173 @@ def test_b_set_get_del_pyredis(benchmark, keys):
         finally:
             if r is not None:
                 r.close()
+    benchmark(work)
+
+
+############################################################
+############################################################
+# Async Str Benchmarks
+############################################################
+############################################################
+
+
+@pytest.fixture(scope='function', autouse=False)
+def loop():
+    loop = asyncio.get_event_loop()
+    if loop.is_closed():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    yield loop
+    loop.close()
+
+
+############################################################
+
+
+@pytest.mark.benchmark(group='async_connect_disconnect')
+def test_a_connect_disconnect_fastredis(benchmark, loop):
+    import fastredis as fr
+    def work():
+        async def async_work():
+            async with fr.AsyncConnection(REDIS_IP, REDIS_PORT) as r:
+                pass
+
+        loop.run_until_complete(async_work())
+    benchmark(work)
+
+
+@pytest.mark.benchmark(group='async_connect_disconnect')
+def test_a_connect_disconnect_aioredis(benchmark, loop):
+    import aioredis
+    def work():
+        async def async_work():
+            try:
+                r = await aioredis.create_redis((REDIS_IP, REDIS_PORT))
+            finally:
+                r.close()
+                await r.wait_closed()
+
+        loop.run_until_complete(async_work())
+    benchmark(work)
+
+
+############################################################
+
+
+@pytest.mark.benchmark(group='async_single_set_get_del')
+def test_a_single_set_get_del_fastredis(benchmark, loop):
+    import fastredis as fr
+    def work():
+        async def async_work():
+            async with fr.AsyncConnection(REDIS_IP, REDIS_PORT) as r:
+                assert await r.command('SET testkey testvalue') == 'OK'
+                assert await r.command('GET testkey') == 'testvalue'
+                assert await r.command('DEL testkey') == 1
+
+        loop.run_until_complete(async_work())
+    benchmark(work)
+
+
+@pytest.mark.benchmark(group='async_single_set_get_del')
+def test_a_single_set_get_del_aioredis(benchmark, loop):
+    import aioredis
+    def work():
+        async def async_work():
+            try:
+                r = await aioredis.create_redis(
+                    (REDIS_IP, REDIS_PORT),
+                    encoding='utf-8'
+                )
+                assert await r.set('testkey', 'testvalue')
+                assert await r.get('testkey') == 'testvalue'
+                assert await r.delete('testkey') == 1
+            finally:
+                r.close()
+                await r.wait_closed()
+
+        loop.run_until_complete(async_work())
+    benchmark(work)
+
+
+# ############################################################
+
+
+@pytest.mark.benchmark(group='async_set_del')
+def test_a_set_del_fastredis(benchmark, loop, keys):
+    import fastredis as fr
+    def work():
+        async def async_work():
+            async with fr.AsyncConnection(REDIS_IP, REDIS_PORT) as r:
+                for key in keys:
+                    assert await r.command(f'SET {key} {key}') == 'OK'
+                for key in keys:
+                    assert await r.command(f'DEL {key}') == 1
+
+        loop.run_until_complete(async_work())
+    benchmark(work)
+
+
+@pytest.mark.benchmark(group='async_set_del')
+def test_a_set_del_aioredis(benchmark, loop, keys):
+    import aioredis
+    def work():
+        async def async_work():
+            try:
+                r = await aioredis.create_redis(
+                    (REDIS_IP, REDIS_PORT),
+                    encoding='utf-8'
+                )
+                for key in keys:
+                    assert await r.set(key, key)
+                for key in keys:
+                    assert await r.delete(key) == 1
+            finally:
+                r.close()
+                await r.wait_closed()
+
+        loop.run_until_complete(async_work())
+    benchmark(work)
+
+
+# ############################################################
+
+
+@pytest.mark.benchmark(group='async_set_get_del')
+def test_a_set_get_del_fastredis(benchmark, loop, keys):
+    import fastredis as fr
+    def work():
+        async def async_work():
+            async with fr.AsyncConnection(REDIS_IP, REDIS_PORT) as r:
+                for key in keys:
+                    assert await r.command(f'SET {key} {key}') == 'OK'
+                for key in keys:
+                    assert await r.command(f'GET {key}') == key
+                for key in keys:
+                    assert await r.command(f'DEL {key}') == 1
+
+        loop.run_until_complete(async_work())
+    benchmark(work)
+
+
+@pytest.mark.benchmark(group='async_set_get_del')
+def test_a_set_get_del_aioredis(benchmark, loop, keys):
+    import aioredis
+    def work():
+        async def async_work():
+            try:
+                r = await aioredis.create_redis(
+                    (REDIS_IP, REDIS_PORT),
+                    encoding='utf-8'
+                )
+                for key in keys:
+                    assert await r.set(key, key)
+                for key in keys:
+                    assert await r.get(key) == key
+                for key in keys:
+                    assert await r.delete(key) == 1
+            finally:
+                r.close()
+                await r.wait_closed()
+
+        loop.run_until_complete(async_work())
     benchmark(work)

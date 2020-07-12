@@ -129,4 +129,9 @@ dmypy.json
 .pyre/
 
 # vscode
-fastredis/workspace.code-workspace
+workspace.code-workspace
+
+# Fastredis build artifacts
+fastredis/*_wrap.c
+fastredis/hiredis.py
+fastredis/hiredisb.py

@@ -4,5 +4,6 @@ from fastredis.wrappers import (
     redis_free
 )
 from fastredis.connections import (
-    SyncConnection
+    SyncConnection,
+    AsyncConnection
 )

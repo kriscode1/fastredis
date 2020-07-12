@@ -5,15 +5,10 @@ from typing import AnyStr, Union
 from fastredis.exceptions import *
 import fastredis.hiredis as hiredis
 import fastredis.hiredisb as hiredisb
-from fastredis.wrappers import (
-    REDIS_REPLY_STRING,
-    REDIS_REPLY_ARRAY,
-    REDIS_REPLY_INTEGER,
-    REDIS_REPLY_NIL,
-    REDIS_REPLY_STATUS,
-    REDIS_REPLY_ERROR,
+from fastredis.wrapper_tools import (
     get_reply_value,
-    ReplyValue
+    ReplyValue,
+    convert_reply_array_b
 )
 
 
@@ -61,6 +56,7 @@ def redis_command(
 
     rep = hiredisb.redisCommand_b(context, command)
     raise_reply_error(context, rep)
+    convert_reply_array_b(rep)
     ret = get_reply_value(rep)
     hiredisb.freeReplyObject_b(rep)
     return ret
@@ -72,7 +68,7 @@ def redis_write(context: hiredisb.redisContext_b, command: bytes) -> None:
     Wrapper around hiredisb.redisAppendCommand_b().
     """
 
-    if hiredisb.redisAppendCommand_b(context, command) == hiredis.REDIS_ERR:
+    if hiredisb.redisAppendCommand_b(context, command) == REDIS_ERR:
         raise_context_error(context)
         raise ContextError('redisAppendCommand error and no error code is set.')
 
@@ -84,9 +80,12 @@ def redis_read(context: hiredisb.redisContext_b) -> ReplyValue:
 
     out = hiredisb.redisReplyOut_b()
     hiredisb.redisGetReplyOL_b(context, out)
-    if out.ret == hiredis.REDIS_ERR:
+    if out.ret == REDIS_ERR:
         raise_context_error(context)
         raise ContextError('redisGetReply error and no error code is set.')
-    ret = get_reply_value(out.reply)
-    hiredisb.freeReplyObject_b(out.reply)
+    rep = out.reply
+    raise_reply_error(context, rep)
+    convert_reply_array_b(rep)
+    ret = get_reply_value(rep)
+    hiredisb.freeReplyObject_b(rep)
     return ret

@@ -1,3 +1,4 @@
+aioredis
 pytest
 pytest-benchmark
 pytest-timeout

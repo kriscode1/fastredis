@@ -1,44 +1,12 @@
 """Low-level wrappers around the exposed hiredis API."""
 
-from typing import AnyStr, Union
-
 from fastredis.exceptions import *
 import fastredis.hiredis as hiredis
-from fastredis.hiredis import (
-    REDIS_REPLY_STRING,
-    REDIS_REPLY_ARRAY,
-    REDIS_REPLY_INTEGER,
-    REDIS_REPLY_NIL,
-    REDIS_REPLY_STATUS,
-    REDIS_REPLY_ERROR
+from fastredis.wrapper_tools import (
+    get_reply_value,
+    ReplyValue,
+    convert_reply_array
 )
-
-
-ReplyValue = Union[AnyStr, int, tuple, None]
-
-
-def get_reply_value(rep: hiredis.redisReply) -> ReplyValue:
-    """Gets the contents of a reply or raises the appropriate error.
-
-    Raises:
-        * ReplyError (Redis server is returning an error)
-        * FastredisError (Unknown reply type)
-    """
-
-    if rep.type == REDIS_REPLY_STATUS:
-        return rep.str
-    elif rep.type == REDIS_REPLY_STRING:
-        return rep.str
-    elif rep.type == REDIS_REPLY_INTEGER:
-        return rep.integer
-    elif rep.type == REDIS_REPLY_NIL:
-        return None
-    elif rep.type == REDIS_REPLY_ARRAY:
-        return tuple(map(serialize_reply, rep.elements))
-    elif rep.type == REDIS_REPLY_ERROR:
-        raise ReplyError
-    else:
-        raise FastredisError(f'Invalid reply type: {rep.type}')
 
 
 def redis_connect(
@@ -87,6 +55,7 @@ def redis_command(
     """
 
     rep = hiredis.redisCommand(context, command)
+    convert_reply_array(rep)
     raise_reply_error(context, rep)
     ret = get_reply_value(rep)
     hiredis.freeReplyObject(rep)
@@ -101,7 +70,7 @@ def redis_write(context: hiredis.redisContext, command: str) -> None:
         * ContextError (any type)
     """
 
-    if hiredis.redisAppendCommand(context, command) == hiredis.REDIS_ERR:
+    if hiredis.redisAppendCommand(context, command) == REDIS_ERR:
         raise_context_error(context)
         raise ContextError('redisAppendCommand error and no error code is set.')
 
@@ -117,9 +86,12 @@ def redis_read(context: hiredis.redisContext) -> ReplyValue:
 
     out = hiredis.redisReplyOut()
     hiredis.redisGetReplyOL(context, out)
-    if out.ret == hiredis.REDIS_ERR:
+    if out.ret == REDIS_ERR:
         raise_context_error(context)
         raise ContextError('redisGetReply error and no error code is set.')
-    ret = get_reply_value(out.reply)
-    hiredis.freeReplyObject(out.reply)
+    rep = out.reply
+    raise_reply_error(context, rep)
+    convert_reply_array(rep)
+    ret = get_reply_value(rep)
+    hiredis.freeReplyObject(rep)
     return ret
